@@ -120,30 +120,52 @@ class Logical_Switch(object):
         for port_no, tun_name, remote_ip in six.itervalues(self.tunnels):
             del_bfd(remote_ip)
 
-    def update_flood(self):
-        flood_ports = list(self.ports.values())
+    def vtep_ports(self, tunnel_list):
+        relay_ports, mesh_ports = list(), list()
+        for tunnel in tunnel_list:
+            if self.tunnels[tunnel][3]:
+                relay_ports.append(self.tunnels[tunnel][0])
+                continue
+            mesh_ports.append(self.tunnels[tunnel][0])
+        return relay_ports, mesh_ports
 
-        # Traffic flowing from one 'unknown-dst' should not be flooded to
-        # port belonging to another 'unknown-dst'.
-        for tunnel in self.unknown_dsts:
-            port_no = self.tunnels[tunnel][0]
-            ovs_ofctl("add-flow %s table=1,priority=1,in_port=%s,action=%s"
-                      % (self.short_name, port_no, ",".join(flood_ports)))
+    def update_flood(self):
+        phy_ports = list(self.ports.values())
+        relay_ports, mesh_ports = self.vtep_ports(self.tunnels.keys())
+        relay_unknown, mesh_unknown = self.vtep_ports(self.unknown_dsts)
 
         # Traffic coming from a VTEP physical port should always be flooded to
         # all the other physical ports that belong to that VTEP device and
-        # this logical switch.  If the replication mode is service node then
+        # this logical switch and all relay VTEP ports.
+        # If the replication mode is service node then
         # send to one unknown_dst node (the first one here); else we assume the
         # replication mode is source node and we send the packet to all
         # unknown_dst nodes.
-        for tunnel in self.unknown_dsts:
-            port_no = self.tunnels[tunnel][0]
-            flood_ports.append(port_no)
-            if self.replication_mode == "service_node":
-                break
 
-        ovs_ofctl("add-flow %s table=1,priority=0,action=%s"
-                  % (self.short_name, ",".join(flood_ports)))
+        phy_flood_ports = phy_ports + relay_unknown
+        if len(mesh_unknown) > 0:
+            if self.replication_mode == "service_node":
+                phy_flood_ports += mesh_unknown[0]
+            else:
+                phy_flood_ports += mesh_unknown
+        for port_no in phy_ports:
+            ovs_ofctl("add-flow %s table=1,priority=1,in_port=%s,action=%s"
+                      % (self.short_name, port_no, ",".join(phy_flood_ports)))
+
+        # Traffic flowing from a mesh VTEP should not be flooded to mesh
+        # unknown-dst ports
+        mesh_flood_ports = phy_ports + relay_unknown
+        for port_no in mesh_ports:
+            ovs_ofctl("add-flow %s table=1,priority=1,in_port=%s,action=%s"
+                      % (self.short_name, port_no, ",".join(mesh_flood_ports)))
+
+        # Traffic flowing from a relay VTEP should not be flooded to relay
+        # unknown-dst ports
+        relay_flood_ports = phy_ports + mesh_unknown
+        for port_no in relay_ports:
+            ovs_ofctl("add-flow %s table=1,priority=1,in_port=%s,action=%s"
+                      % (self.short_name,
+                          port_no, ",".join(relay_flood_ports)))
 
     def add_lbinding(self, lbinding):
         vlog.info("adding %s binding to %s" % (lbinding, self.name))
@@ -164,11 +186,22 @@ class Logical_Switch(object):
         del self.ports[lbinding]
         self.update_flood()
 
+    def tunnel_dict(self, entry):
+        return {
+                'tunnel_type': entry[2],
+                'dest_ip': entry[3],
+                'tunnel_key': entry[5],
+               }
+
     def add_tunnel(self, tunnel, tunnel_key):
         global tun_id
-        vlog.info("adding tunnel %s" % tunnel)
-        encap, ip = tunnel.split("/")
+        if tunnel['tunnel_key']:
+            tunnel_key = tunnel['tunnel_key']
+        vlog.info("adding tunnel %s key %s" % (tunnel['dest_ip'],
+                   tunnel_key))
 
+        encap = tunnel['tunnel_type']
+        ip = tunnel['dest_ip']
         if encap != "vxlan_over_ipv4":
             vlog.warn("unsupported tunnel format %s" % encap)
             return
@@ -192,7 +225,7 @@ class Logical_Switch(object):
             # Give the system a moment to allocate the port number
             time.sleep(0.5)
 
-        self.tunnels[tunnel] = (port_no, tun_name, ip)
+        self.tunnels[ip] = (port_no, tun_name, ip, tunnel['tunnel_key'])
 
         add_bfd(ip)
 
@@ -200,17 +233,17 @@ class Logical_Switch(object):
                   "actions=resubmit(,1)"
                   % (self.short_name, port_no))
 
-    def del_tunnel(self, tunnel):
-        vlog.info("removing tunnel %s" % tunnel)
+    def del_tunnel(self, tunnel_ip):
+        vlog.info("removing tunnel %s" % tunnel_ip)
 
-        port_no, tun_name, remote_ip = self.tunnels[tunnel]
+        port_no, tun_name, remote_ip, tunnel_key = self.tunnels[tunnel_ip]
         ovs_ofctl("del-flows %s table=0,in_port=%s"
                   % (self.short_name, port_no))
         ovs_vsctl("del-port %s %s" % (self.short_name, tun_name))
 
         del_bfd(remote_ip)
 
-        del self.tunnels[tunnel]
+        del self.tunnels[tunnel_ip]
 
     def update_local_macs(self):
         flows = ovs_ofctl("dump-flows %s cookie=0x5000/-1,table=1"
@@ -231,8 +264,8 @@ class Logical_Switch(object):
 
         self.local_macs = macs
 
-    def add_remote_mac(self, mac, tunnel):
-        port_no = self.tunnels.get(tunnel, (0, ""))[0]
+    def add_remote_mac(self, mac, tunnel_ip):
+        port_no = self.tunnels.get(tunnel_ip, (0, ""))[0]
         if not port_no:
             return
 
@@ -245,7 +278,7 @@ class Logical_Switch(object):
     def update_remote_macs(self):
         remote_macs = {}
         unknown_dsts = set()
-        tunnels = set()
+        tunnels = {}
         parse_ucast = True
 
         column = vtep_ctl("--columns=tunnel_key find logical_switch "
@@ -264,27 +297,26 @@ class Logical_Switch(object):
             if (line.find("mcast-mac-remote") != -1):
                 parse_ucast = False
                 continue
-
-            entry = re.split(r'  (.*) -> (.*)', line)
-            if len(entry) != 4:
+            entry = re.split(r'  (.*) -> ([^/]*)/(\S*)( \[(.*)\])?', line)
+            if len(entry) != 7:
                 continue
 
             if parse_ucast:
-                remote_macs[entry[1]] = entry[2]
+                remote_macs[entry[1]] = self.tunnel_dict(entry)['tunnel_type']
             else:
                 if entry[1] != "unknown-dst":
                     continue
 
-                unknown_dsts.add(entry[2])
+                unknown_dsts.add(entry[3])
 
-            tunnels.add(entry[2])
+            tunnels[entry[3]] = self.tunnel_dict(entry)
 
         old_tunnels = set(self.tunnels.keys())
+        tunnels_keys = set(tunnels.keys())
+        for tunnel in tunnels_keys.difference(old_tunnels):
+            self.add_tunnel(tunnels[tunnel], tunnel_key)
 
-        for tunnel in tunnels.difference(old_tunnels):
-            self.add_tunnel(tunnel, tunnel_key)
-
-        for tunnel in old_tunnels.difference(tunnels):
+        for tunnel in old_tunnels.difference(tunnels_keys):
             self.del_tunnel(tunnel)
 
         for mac in six.iterkeys(remote_macs):
