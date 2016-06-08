@@ -64,7 +64,7 @@ def call_prog(prog, args_list):
     if len(output) == 0 or output[0] is None:
         output = ""
     else:
-        output = output[0].strip()
+        output = output[0].decode().strip()
     return output
 
 
@@ -94,7 +94,7 @@ class Logical_Switch(object):
         global ls_count
         self.name = ls_name
         ls_count += 1
-        self.short_name = "vtep_ls" + str(ls_count)
+        self.short_name = ps_name + "_vtep_ls" + str(ls_count)
         vlog.info("creating lswitch %s (%s)" % (self.name, self.short_name))
         self.ports = {}
         # tunnel = { key = dest_ip, value = (ovs_port_no, tun_name, tunnel['dest_ip'])) }
@@ -104,6 +104,7 @@ class Logical_Switch(object):
         self.unknown_dsts = set()
         self.tunnel_key = 0
         self.setup_ls()
+        self.replication_mode = "service_node"
 
     def __del__(self):
         vlog.info("destroying lswitch %s" % self.name)
@@ -209,6 +210,8 @@ class Logical_Switch(object):
                           ",".join(flood_ports)))
                 vlog.info("%s added flood from %s to %s" % (self.short_name,
                           port_no,flood_ports))
+                if self.replication_mode == "service_node":
+                    break		
 
 
     def add_lbinding(self, lbinding):
@@ -230,7 +233,13 @@ class Logical_Switch(object):
         del self.ports[lbinding]
         self.update_flood()
 
-    # tunnel is a dict { tunnel_type: xx, dest_ip: x.x.x.x, tunnel_key: kk }
+    def tunnel_dict(self,entry):
+        return {
+	    'tunnel_type': entry[2],
+            'dest_ip': entry[3],
+	    'tunnel_key': entry[4],
+        }
+
     def add_tunnel(self, tunnel):
         global tun_id
         tunnel_key = tunnel['tunnel_key']
@@ -249,9 +258,10 @@ class Logical_Switch(object):
         if 'tunnel_type' not in tunnel.keys():
             vlog.warn("tunnel format %s unspecified for " % tunnel['dest_ip'])
             return
-
-        if "vxlan_over_ipv4" != tunnel['tunnel_type']:
-            vlog.warn("unsupported tunnel format %s" % tunnel['tunnel_type'])
+        encap = tunnel['tunnel_type']	    
+	ip = tunnel['dest_ip']
+        if "vxlan_over_ipv4" != encap:
+            vlog.warn("unsupported tunnel format %s" % encap)
             return
 
         tun_id += 1
@@ -261,7 +271,7 @@ class Logical_Switch(object):
         ovs_vsctl("add-port %s %s -- set Interface %s type=vxlan "
                 "options:key=%s options:remote_ip=%s options:df_default=%s"
                   % (self.short_name, tun_name,
-                     tun_name, tunnel_key, tunnel['dest_ip'],
+                     tun_name, tunnel_key, ip,
                      'true' if df_fragment else 'false'))
 
         port_no = ovs_vsctl("get Interface %s ofport" % tun_name)
@@ -273,12 +283,12 @@ class Logical_Switch(object):
         # Give the system a moment to allocate the port number
         time.sleep(0.5)
         vlog.info("tunnel => %s is on port %s" % (tunnel['dest_ip'],port_no))
-        self.tunnels[tunnel['dest_ip']] = (port_no,
-                                           tun_name,
-                                           tunnel['dest_ip'],
-                                           tunnel['tunnel_key'])
+        self.tunnels[ip] = (port_no,
+                                    tun_name,
+                                    ip,
+                                    tunnel['tunnel_key'])
 
-        add_bfd(tunnel['dest_ip'])
+        add_bfd(ip)
         ovs_ofctl("add-flow %s table=0,in_port=%s,priority=100,"
                   "action=learn(table=1,"
                   "priority=700,idle_timeout=15,cookie=0x5000,"
@@ -286,12 +296,12 @@ class Logical_Switch(object):
                   "output:NXM_OF_IN_PORT[]),resubmit(,1)"
                   % (self.short_name, port_no))
         vlog.info("added mac learn rule for tunnel[%s], at port %s"
-                  % (tunnel['dest_ip'],port_no))
+                  % (ip,port_no))
         ovs_ofctl("add-flow %s table=0,priority=10,in_port=%s,"
                   "actions=resubmit(,1)"
                   % (self.short_name, port_no))
         vlog.info("add flow resubmit to table 1 ,tunnel => %s is on port %s"
-                % (tunnel['dest_ip'],port_no))
+                % (ip,port_no))
 
        
     def del_tunnel(self, tunnel):
@@ -356,14 +366,7 @@ class Logical_Switch(object):
     def del_remote_mac(self, mac):
         ovs_ofctl("del-flows %s table=1,dl_dst=%s" % (self.short_name, mac))
 
-    def get_tunnel_info(self, entry):
-        values = {}
-        values['tunnel_type'] = entry[2]
-        values['dest_ip'] = entry[3]
-        values['tunnel_key'] = entry[4]
-        return values
-
-    def update_remote_macs(self):
+      def update_remote_macs(self):
         remote_macs = {}
         unknown_dsts = set()
         tunnels = {}
@@ -374,19 +377,19 @@ class Logical_Switch(object):
             if (line.find("mcast-mac-remote") != -1):
                 parse_ucast = False
                 continue
-
             entry = re.split(r'  (.*) -> (.*)/(.*) \[(.*)\]', line)
             if len(entry) != 6:
                 continue
 
             if parse_ucast:
-                remote_macs[entry[1]] = self.get_tunnel_info(entry)
+                remote_macs[entry[1]] = self.tunnel_dict(entry)
             else:
                 if entry[1] != "unknown-dst":
                     continue
+
                 unknown_dsts.add(entry[3])
 
-            tunnels[entry[3]] = self.get_tunnel_info(entry)
+            tunnels[entry[3]]= self.tunnel_dict(entry)
 
         old_tunnels = set(self.tunnels.keys())
         update_flood = False
@@ -413,9 +416,30 @@ class Logical_Switch(object):
 
         self.remote_macs = remote_macs
 
+        replication_mode = vtep_ctl("get logical_switch %s replication_mode"
+                                    % self.name)
+
+        # Replication mode is an optional column and if it is not set,
+        # replication mode defaults to service_node.
+        if replication_mode == "[]":
+            replication_mode = "service_node"
+
+        # If the logical switch level replication mode has changed then
+        # update to that value.
+        update_flood_set = False
+        if replication_mode != self.replication_mode:
+            self.replication_mode = replication_mode
+            vlog.info("%s replication mode changed to %s" %
+                      (self.name, self.replication_mode))
+            update_flood_set = True
+
         if (self.unknown_dsts != unknown_dsts):
             vlog.info("unknown dst are %s" % self.unknown_dsts)
             self.unknown_dsts = unknown_dsts
+            update_flood_set = True
+        # If either the replication mode has changed or the unknown
+        # destinations set has changed, update the flooding decision.
+        if update_flood_set is True:
             self.update_flood()
 
     def update_stats(self):
@@ -504,8 +528,8 @@ def create_vtep_tunnel(remote_ip):
         return None
 
     if not tunnel:
-        #vlog.info("creating tunnel record in vtep for remote_ip:%s"
-        #          % remote_ip)
+        vlog.info("creating tunnel record in vtep for remote_ip:%s"
+                  % remote_ip)
         tunnel = vtep_ctl("add physical_switch %s tunnels @tun -- "
                           "--id=@tun create Tunnel local=%s remote=%s"
                           % (ps_name, local, remote))
@@ -689,8 +713,8 @@ def del_binding(binding, ls):
                   % (ps_name, port_no, vlan_))
         ovs_ofctl("del-flows %s in_port=%s" % (ps_name, patch_no))
     else:
-        ovs_ofctl("del-flows %s in_port=%s" % (ps_name, port_no))
-        ovs_ofctl("del-flows %s in_port=%s" % (ps_name, patch_no))
+        ovs_ofctl("--strict del-flows %s in_port=%s" % (ps_name, port_no))
+        ovs_ofctl("--strict del-flows %s in_port=%s" % (ps_name, patch_no))
 
     ls.del_lbinding(lbinding)
 
@@ -708,7 +732,7 @@ def handle_physical():
     switch_list = vtep_ctl("list-ls").splitlines()
     for ls_name in switch_list:
         if ls_name not in Lswitches.keys():
-            Lswitches[ls_name] = Logical_Switch(ls_name)
+            Lswitches[ls_name] = Logical_Switch(ls_name,ps_name)
     removed_switches = list()
     for ls_name in Lswitches.keys():
         if ls_name not in switch_list:
