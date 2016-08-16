@@ -433,12 +433,20 @@ AT_CHECK([RUN_VTEP_CTL(
 CHECK_LSWITCHES([ls1])
 AT_CHECK([RUN_VTEP_CTL(
    [add-ucast-local ls1 00:11:22:33:44:55 10.0.0.10],
-   [add-ucast-local ls1 00:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11])
+   [add-ucast-local ls1 00:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
+   [add-ucast-local ls1 00:11:22:33:55:66 10.0.0.12 100],
+   [add-ucast-local ls1 00:11:22:33:55:77 vxlan_over_ipv4 10.0.0.13 200],
+   [add-ucast-local ls1 00:11:22:33:55:88 10.0.0.14 300 level0],
+   [add-ucast-local ls1 00:11:22:33:55:99 vxlan_over_ipv4 10.0.0.15 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
   00:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   00:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  00:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.12 100
+  00:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.13 200
+  00:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.14 300 level0
+  00:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.15 400 level1
 
 mcast-mac-local
 
@@ -460,11 +468,26 @@ AT_CHECK([RUN_VTEP_CTL(
 CHECK_LSWITCHES([ls1])
 AT_CHECK([RUN_VTEP_CTL(
    [add-ucast-local ls1 00:11:22:33:44:55 10.0.0.10],
-   [add-ucast-local ls1 00:11:22:33:44:55 10.0.0.11])
+   [add-ucast-local ls1 00:11:22:33:44:55 10.0.0.11],
+   [add-ucast-local ls1 00:11:22:33:55:66 10.0.0.12 100],
+   [add-ucast-local ls1 00:11:22:33:55:66 10.0.0.13 200],
+   [add-ucast-local ls1 00:11:22:33:55:77 10.0.0.14 300],
+   [add-ucast-local ls1 00:11:22:33:55:77 10.0.0.15],
+   [add-ucast-local ls1 00:11:22:33:55:88 10.0.0.16],
+   [add-ucast-local ls1 00:11:22:33:55:88 10.0.0.17 400],
+   [add-ucast-local ls1 00:11:22:33:55:99 10.0.0.18 500 level0],
+   [add-ucast-local ls1 00:11:22:33:55:99 10.0.0.19 600 level1],
+   [add-ucast-local ls1 00:11:22:33:56:11 10.0.0.20 700 level1],
+   [add-ucast-local ls1 00:11:22:33:56:11 10.0.0.21])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
   00:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.11
+  00:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.13 200
+  00:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15
+  00:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.17 400
+  00:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.19 600 level1
+  00:11:22:33:56:11 -> vxlan_over_ipv4/10.0.0.21
 
 mcast-mac-local
 
@@ -480,22 +503,34 @@ AT_CHECK([RUN_VTEP_CTL(
 CHECK_LSWITCHES([ls1])
 AT_CHECK([RUN_VTEP_CTL(
    [add-ucast-local ls1 00:11:22:33:44:55 10.0.0.10],
-   [add-ucast-local ls1 00:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11])
+   [add-ucast-local ls1 00:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
+   [add-ucast-local ls1 00:11:22:33:55:66 10.0.0.12 100],
+   [add-ucast-local ls1 00:11:22:33:55:77 vxlan_over_ipv4 10.0.0.13 200],
+   [add-ucast-local ls1 00:11:22:33:55:88 10.0.0.14 300 level0],
+   [add-ucast-local ls1 00:11:22:33:55:99 vxlan_over_ipv4 10.0.0.15 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
   00:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   00:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  00:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.12 100
+  00:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.13 200
+  00:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.14 300 level0
+  00:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.15 400 level1
 
 mcast-mac-local
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL(
-   [del-ucast-local ls1 00:11:22:33:44:55])
+   [del-ucast-local ls1 00:11:22:33:44:55],
+   [del-ucast-local ls1 00:11:22:33:55:66],
+   [del-ucast-local ls1 00:11:22:33:55:88],
+   [del-ucast-local ls1 00:11:22:33:55:99])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
   00:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  00:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.13 200
 
 mcast-mac-local
 
@@ -511,12 +546,20 @@ AT_CHECK([RUN_VTEP_CTL(
 CHECK_LSWITCHES([ls1])
 AT_CHECK([RUN_VTEP_CTL(
    [add-ucast-remote ls1 00:11:22:33:44:55 10.0.0.10],
-   [add-ucast-remote ls1 00:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11])
+   [add-ucast-remote ls1 00:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
+   [add-ucast-remote ls1 00:11:22:33:55:66 10.0.0.12 100],
+   [add-ucast-remote ls1 00:11:22:33:55:77 10.0.0.13 200],
+   [add-ucast-remote ls1 00:11:22:33:55:88 10.0.0.14 300 level0],
+   [add-ucast-remote ls1 00:11:22:33:55:99 vxlan_over_ipv4 10.0.0.15 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
    [ucast-mac-remote
   00:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   00:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  00:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.12 100
+  00:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.13 200
+  00:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.14 300 level0
+  00:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.15 400 level1
 
 mcast-mac-remote
 
@@ -538,11 +581,20 @@ AT_CHECK([RUN_VTEP_CTL(
 CHECK_LSWITCHES([ls1])
 AT_CHECK([RUN_VTEP_CTL(
    [add-ucast-remote ls1 00:11:22:33:44:55 10.0.0.10],
-   [add-ucast-remote ls1 00:11:22:33:44:55 10.0.0.11])
+   [add-ucast-remote ls1 00:11:22:33:44:55 10.0.0.11],
+   [add-ucast-remote ls1 00:11:22:33:55:66 10.0.0.12 100],
+   [add-ucast-remote ls1 00:11:22:33:55:66 10.0.0.13 200],
+   [add-ucast-remote ls1 00:11:22:33:55:99 10.0.0.18 500 level0],
+   [add-ucast-remote ls1 00:11:22:33:55:99 10.0.0.19 600 level1],
+   [add-ucast-remote ls1 00:11:22:33:56:11 10.0.0.20 700 level1],
+   [add-ucast-remote ls1 00:11:22:33:56:11 10.0.0.21])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
    [ucast-mac-remote
   00:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.11
+  00:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.13 200
+  00:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.19 600 level1
+  00:11:22:33:56:11 -> vxlan_over_ipv4/10.0.0.21
 
 mcast-mac-remote
 
@@ -558,22 +610,34 @@ AT_CHECK([RUN_VTEP_CTL(
 CHECK_LSWITCHES([ls1])
 AT_CHECK([RUN_VTEP_CTL(
    [add-ucast-remote ls1 00:11:22:33:44:55 10.0.0.10],
-   [add-ucast-remote ls1 00:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11])
+   [add-ucast-remote ls1 00:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
+   [add-ucast-remote ls1 00:11:22:33:55:66 10.0.0.12 100],
+   [add-ucast-remote ls1 00:11:22:33:55:77 vxlan_over_ipv4 10.0.0.13 200],
+   [add-ucast-remote ls1 00:11:22:33:55:88 10.0.0.14 300 level0],
+   [add-ucast-remote ls1 00:11:22:33:55:99 vxlan_over_ipv4 10.0.0.15 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
    [ucast-mac-remote
   00:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   00:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  00:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.12 100
+  00:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.13 200
+  00:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.14 300 level0
+  00:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.15 400 level1
 
 mcast-mac-remote
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL(
-   [del-ucast-remote ls1 00:11:22:33:44:55])
+   [del-ucast-remote ls1 00:11:22:33:44:55],
+   [del-ucast-remote ls1 00:11:22:33:55:66],
+   [del-ucast-remote ls1 00:11:22:33:55:88],
+   [del-ucast-remote ls1 00:11:22:33:55:99])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
    [ucast-mac-remote
   00:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  00:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.13 200
 
 mcast-mac-remote
 
@@ -590,13 +654,25 @@ CHECK_LSWITCHES([ls1])
 AT_CHECK([RUN_VTEP_CTL(
    [add-ucast-local ls1 00:11:22:33:44:55 10.0.0.10],
    [add-ucast-local ls1 00:11:22:33:44:66 10.0.0.11],
+   [add-ucast-local ls1 00:11:22:33:55:66 10.0.0.12 100],
+   [add-ucast-local ls1 00:11:22:33:55:77 vxlan_over_ipv4 10.0.0.13 200],
+   [add-ucast-local ls1 00:11:22:33:55:88 10.0.0.14 300 level0],
+   [add-ucast-local ls1 00:11:22:33:55:99 vxlan_over_ipv4 10.0.0.15 400 level1],
    [add-ucast-remote ls1 02:11:22:33:44:55 10.0.0.10],
-   [add-ucast-remote ls1 02:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11])
+   [add-ucast-remote ls1 02:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
+   [add-ucast-remote ls1 02:11:22:33:55:66 10.0.0.12 100],
+   [add-ucast-remote ls1 02:11:22:33:55:77 vxlan_over_ipv4 10.0.0.13 200],
+   [add-ucast-remote ls1 02:11:22:33:55:88 10.0.0.14 300 level0],
+   [add-ucast-remote ls1 02:11:22:33:55:99 vxlan_over_ipv4 10.0.0.15 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
   00:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   00:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  00:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.12 100
+  00:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.13 200
+  00:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.14 300 level0
+  00:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.15 400 level1
 
 mcast-mac-local
 
@@ -605,6 +681,10 @@ AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
    [ucast-mac-remote
   02:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   02:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  02:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.12 100
+  02:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.13 200
+  02:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.14 300 level0
+  02:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.15 400 level1
 
 mcast-mac-remote
 
@@ -621,7 +701,11 @@ CHECK_LSWITCHES([ls1])
 AT_CHECK([RUN_VTEP_CTL(
    [add-mcast-local ls1 01:11:22:33:44:55 10.0.0.10],
    [add-mcast-local ls1 01:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
-   [add-mcast-local ls1 01:11:22:33:44:55 10.0.0.12])
+   [add-mcast-local ls1 01:11:22:33:44:55 10.0.0.12],
+   [add-mcast-local ls1 01:11:22:33:55:66 10.0.0.13 100],
+   [add-mcast-local ls1 01:11:22:33:55:77 vxlan_over_ipv4 10.0.0.14 200],
+   [add-mcast-local ls1 01:11:22:33:55:88 10.0.0.15 300 level0],
+   [add-mcast-local ls1 01:11:22:33:55:99 vxlan_over_ipv4 10.0.0.16 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
@@ -630,6 +714,10 @@ mcast-mac-local
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.13 100
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.14 200
+  01:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.15 300 level0
+  01:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.16 400 level1
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
@@ -651,7 +739,11 @@ AT_CHECK([RUN_VTEP_CTL(
    [add-mcast-local ls1 01:11:22:33:44:55 10.0.0.10],
    [add-mcast-local ls1 01:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
    [add-mcast-local ls1 01:11:22:33:44:55 10.0.0.12],
-   [add-mcast-local ls1 01:11:22:33:44:55 10.0.0.13])
+   [add-mcast-local ls1 01:11:22:33:44:55 10.0.0.13],
+   [add-mcast-local ls1 01:11:22:33:55:66 10.0.0.14 100],
+   [add-mcast-local ls1 01:11:22:33:55:77 vxlan_over_ipv4 10.0.0.15 200],
+   [add-mcast-local ls1 01:11:22:33:55:88 10.0.0.16 300 level0],
+   [add-mcast-local ls1 01:11:22:33:55:99 vxlan_over_ipv4 10.0.0.17 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
@@ -661,10 +753,16 @@ mcast-mac-local
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.13
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 200
+  01:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.16 300 level0
+  01:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.17 400 level1
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL(
-   [del-mcast-local ls1 01:11:22:33:44:55 10.0.0.12])
+   [del-mcast-local ls1 01:11:22:33:44:55 10.0.0.12],
+   [del-mcast-local ls1 01:11:22:33:55:66 10.0.0.14],
+   [del-mcast-local ls1 01:11:22:33:55:88 10.0.0.16])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
@@ -673,6 +771,8 @@ mcast-mac-local
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.13
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 200
+  01:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.17 400 level1
 
 ], [], [VTEP_CTL_CLEANUP])
 VTEP_CTL_CLEANUP
@@ -687,7 +787,12 @@ CHECK_LSWITCHES([ls1])
 AT_CHECK([RUN_VTEP_CTL(
    [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.10],
    [add-mcast-remote ls1 01:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
-   [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.12])
+   [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.12],
+   [add-mcast-remote ls1 01:11:22:33:55:66 10.0.0.13 100],
+   [add-mcast-remote ls1 01:11:22:33:55:77 vxlan_over_ipv4 10.0.0.14 300],
+   [add-mcast-remote ls1 01:11:22:33:55:66 10.0.0.15 200],
+   [add-mcast-remote ls1 01:11:22:33:55:88 10.0.0.16 300 level0],
+   [add-mcast-remote ls1 01:11:22:33:55:99 vxlan_over_ipv4 10.0.0.17 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
    [ucast-mac-remote
@@ -696,6 +801,11 @@ mcast-mac-remote
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.13 100
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.15 200
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.14 300
+  01:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.16 300 level0
+  01:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.17 400 level1
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
@@ -717,7 +827,12 @@ AT_CHECK([RUN_VTEP_CTL(
    [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.10],
    [add-mcast-remote ls1 01:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
    [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.12],
-   [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.13])
+   [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.13],
+   [add-mcast-remote ls1 01:11:22:33:55:66 10.0.0.14 100],
+   [add-mcast-remote ls1 01:11:22:33:55:77 vxlan_over_ipv4 10.0.0.15 300],
+   [add-mcast-remote ls1 01:11:22:33:55:66 10.0.0.16 200],
+   [add-mcast-remote ls1 01:11:22:33:55:88 10.0.0.17 300 level0],
+   [add-mcast-remote ls1 01:11:22:33:55:99 vxlan_over_ipv4 10.0.0.18 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
    [ucast-mac-remote
@@ -727,10 +842,17 @@ mcast-mac-remote
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.13
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
+  01:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.17 300 level0
+  01:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.18 400 level1
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL(
-   [del-mcast-remote ls1 01:11:22:33:44:55 10.0.0.12])
+   [del-mcast-remote ls1 01:11:22:33:44:55 10.0.0.12],
+   [del-mcast-remote ls1 01:11:22:33:55:66 10.0.0.14],
+   [del-mcast-remote ls1 01:11:22:33:55:88 10.0.0.17])		
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
    [ucast-mac-remote
@@ -739,6 +861,9 @@ mcast-mac-remote
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.13
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
+  01:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.18 400 level1
 
 ], [], [VTEP_CTL_CLEANUP])
 VTEP_CTL_CLEANUP
@@ -756,7 +881,15 @@ AT_CHECK([RUN_VTEP_CTL(
    [add-mcast-local ls1 01:11:22:33:44:55 10.0.0.12],
    [add-mcast-remote ls1 03:11:22:33:44:55 10.0.0.10],
    [add-mcast-remote ls1 03:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
-   [add-mcast-remote ls1 03:11:22:33:44:55 10.0.0.12])
+   [add-mcast-remote ls1 03:11:22:33:44:55 10.0.0.12],
+   [add-mcast-local ls1 01:11:22:33:55:66 10.0.0.14 100],
+   [add-mcast-local ls1 01:11:22:33:55:77 vxlan_over_ipv4 10.0.0.15 300],
+   [add-mcast-local ls1 01:11:22:33:55:66 10.0.0.16 200],
+   [add-mcast-remote ls1 03:11:22:33:55:66 10.0.0.14 100],
+   [add-mcast-remote ls1 03:11:22:33:55:77 vxlan_over_ipv4 10.0.0.15 300],
+   [add-mcast-remote ls1 03:11:22:33:55:66 10.0.0.16 200],
+   [add-mcast-local ls1 01:11:22:33:55:88 10.0.0.17 300 level0],
+   [add-mcast-remote ls1 01:11:22:33:55:99 vxlan_over_ipv4 10.0.0.18 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
@@ -765,15 +898,23 @@ mcast-mac-local
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
+  01:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.17 300 level0
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
    [ucast-mac-remote
 
 mcast-mac-remote
+  01:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.18 400 level1
   03:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   03:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   03:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  03:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  03:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  03:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
 
 ], [], [VTEP_CTL_CLEANUP])
 VTEP_CTL_CLEANUP
@@ -793,7 +934,15 @@ AT_CHECK([RUN_VTEP_CTL(
    [add-ucast-remote ls1 00:11:22:33:44:55 10.0.0.10],
    [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.10],
    [add-mcast-remote ls1 01:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
-   [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.12])
+   [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.12],
+   [add-mcast-local ls1 01:11:22:33:55:66 10.0.0.14 100],
+   [add-mcast-local ls1 01:11:22:33:55:77 vxlan_over_ipv4 10.0.0.15 300],
+   [add-mcast-local ls1 01:11:22:33:55:66 10.0.0.16 200],
+   [add-mcast-remote ls1 03:11:22:33:55:66 10.0.0.14 100],
+   [add-mcast-remote ls1 03:11:22:33:55:77 vxlan_over_ipv4 10.0.0.15 300],
+   [add-mcast-remote ls1 03:11:22:33:55:66 10.0.0.16 200],
+   [add-mcast-local ls1 01:11:22:33:55:88 10.0.0.17 300 level0],
+   [add-mcast-remote ls1 03:11:22:33:55:99 vxlan_over_ipv4 10.0.0.18 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
@@ -803,6 +952,10 @@ mcast-mac-local
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
+  01:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.17 300 level0
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
@@ -813,6 +966,10 @@ mcast-mac-remote
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  03:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  03:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  03:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
+  03:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.18 400 level1
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL(
@@ -831,6 +988,10 @@ mcast-mac-remote
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  03:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  03:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  03:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
+  03:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.18 400 level1
 
 ], [], [VTEP_CTL_CLEANUP])
 VTEP_CTL_CLEANUP
@@ -850,7 +1011,15 @@ AT_CHECK([RUN_VTEP_CTL(
    [add-ucast-remote ls1 00:11:22:33:44:55 10.0.0.10],
    [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.10],
    [add-mcast-remote ls1 01:11:22:33:44:66 vxlan_over_ipv4 10.0.0.11],
-   [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.12])
+   [add-mcast-remote ls1 01:11:22:33:44:55 10.0.0.12],
+   [add-mcast-local ls1 01:11:22:33:55:66 10.0.0.14 100],
+   [add-mcast-local ls1 01:11:22:33:55:77 vxlan_over_ipv4 10.0.0.15 300],
+   [add-mcast-local ls1 01:11:22:33:55:66 10.0.0.16 200],
+   [add-mcast-remote ls1 03:11:22:33:55:66 10.0.0.14 100],
+   [add-mcast-remote ls1 03:11:22:33:55:77 vxlan_over_ipv4 10.0.0.15 300],
+   [add-mcast-remote ls1 03:11:22:33:55:66 10.0.0.16 200],
+   [add-mcast-local ls1 01:11:22:33:55:88 10.0.0.17 300 level0],
+   [add-mcast-remote ls1 03:11:22:33:55:99 vxlan_over_ipv4 10.0.0.18 400 level1])
 ], [0], [], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-local-macs ls1])], [0],
    [ucast-mac-local
@@ -860,6 +1029,10 @@ mcast-mac-local
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
+  01:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.17 300 level0
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],
@@ -870,6 +1043,10 @@ mcast-mac-remote
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  03:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  03:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  03:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
+  03:11:22:33:55:99 -> vxlan_over_ipv4/10.0.0.18 400 level1
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL(
@@ -882,6 +1059,10 @@ mcast-mac-local
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.10
   01:11:22:33:44:55 -> vxlan_over_ipv4/10.0.0.12
   01:11:22:33:44:66 -> vxlan_over_ipv4/10.0.0.11
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.14 100
+  01:11:22:33:55:66 -> vxlan_over_ipv4/10.0.0.16 200
+  01:11:22:33:55:77 -> vxlan_over_ipv4/10.0.0.15 300
+  01:11:22:33:55:88 -> vxlan_over_ipv4/10.0.0.17 300 level0
 
 ], [], [VTEP_CTL_CLEANUP])
 AT_CHECK([RUN_VTEP_CTL([list-remote-macs ls1])], [0],

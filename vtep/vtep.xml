@@ -1174,6 +1174,18 @@
       </p>
     </column>
 
+    <column name="tunnel_level">
+      <p>
+        For <code>vxlan_over_ipv4</code> encapsulation, represents the
+        hierarchy level of the <ref table="Physical_Locator"/>.
+        Broadcast, unknown unicast and multicast (BUM) traffic received
+        at one level is never sent to another <ref table="Physical_Locator"/>
+        of the same level.  The only valid values supported are level0 and
+        level1; this column is optional and the default value if not
+        configured is level0.
+      </p>
+    </column>
+
   </table>
   <table name="ACL_entry">
     <p>

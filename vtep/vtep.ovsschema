@@ -1,6 +1,6 @@
 {
   "name": "hardware_vtep",
-  "cksum": "353943336 11434",
+  "cksum": "2728111540 11603",
   "tables": {
     "Global": {
       "columns": {
@@ -209,7 +209,12 @@
               "type": "string"}},
           "mutable": false},
         "dst_ip": {"type": "string", "mutable": false},
-        "tunnel_key": {"type": {"key": "integer", "min": 0, "max": 1}}},
+        "tunnel_key": {"type": {"key": "integer", "min": 0, "max": 1}},
+        "tunnel_level": {
+          "type": {
+           "key": {
+            "enum": ["set", ["level0", "level1"]],
+            "type": "string"},"min": 0, "max": 1}}},
       "indexes": [["encapsulation_type", "dst_ip", "tunnel_key"]]},
     "ACL_entry": {
       "columns": {

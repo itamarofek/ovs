@@ -37,6 +37,7 @@
 #include "openvswitch/json.h"
 #include "ovsdb-data.h"
 #include "ovsdb-idl.h"
+#include "lib/packets.h"
 #include "poll-loop.h"
 #include "process.h"
 #include "stream.h"
@@ -345,18 +346,18 @@ Logical Router commands:\n\
   lr-exists LR                exit 2 if LR does not exist\n\
 \n\
 MAC binding commands:\n\
-  add-ucast-local LS MAC [ENCAP] IP   add ucast local entry in LS\n\
-  del-ucast-local LS MAC              del ucast local entry from LS\n\
-  add-mcast-local LS MAC [ENCAP] IP   add mcast local entry in LS\n\
-  del-mcast-local LS MAC [ENCAP] IP   del mcast local entry from LS\n\
-  clear-local-macs LS                 clear local mac entries\n\
-  list-local-macs LS                  list local mac entries\n\
-  add-ucast-remote LS MAC [ENCAP] IP  add ucast remote entry in LS\n\
-  del-ucast-remote LS MAC             del ucast remote entry from LS\n\
-  add-mcast-remote LS MAC [ENCAP] IP  add mcast remote entry in LS\n\
-  del-mcast-remote LS MAC [ENCAP] IP  del mcast remote entry from LS\n\
-  clear-remote-macs LS                clear remote mac entries\n\
-  list-remote-macs LS                 list remote mac entries\n\
+  add-ucast-local LS MAC [ENCAP] IP [KEY [LEVEL]]  add ucast local entry in LS\n\
+  del-ucast-local LS MAC                           del ucast local entry from LS\n\
+  add-mcast-local LS MAC [ENCAP] IP [KEY [LEVEL]]  add mcast local entry in LS\n\
+  del-mcast-local LS MAC [ENCAP] IP                del mcast local entry from LS\n\
+  clear-local-macs LS                              clear local mac entries\n\
+  list-local-macs LS                               list local mac entries\n\
+  add-ucast-remote LS MAC [ENCAP] IP [KEY [LEVEL]] add ucast remote entry in LS\n\
+  del-ucast-remote LS MAC                          del ucast remote entry from LS\n\
+  add-mcast-remote LS MAC [ENCAP] IP [KEY [LEVEL]] add mcast remote entry in LS\n\
+  del-mcast-remote LS MAC [ENCAP] IP               del mcast remote entry from LS\n\
+  clear-remote-macs LS                             clear remote mac entries\n\
+  list-remote-macs LS                              list remote mac entries\n\
 \n\
 %s\
 \n\
@@ -449,6 +450,14 @@ struct vtep_ctl_context {
                              * struct vteprec_physical_locator. */
     struct shash lrouters;  /* Maps from logical router name to
                              * struct vtep_ctl_lrouter. */
+};
+
+struct add_mac_args {
+    const char *mac;
+    const char *encap;
+    const char *dst_ip;
+    const char *tunnel_key;
+    const char *tunnel_level;
 };
 
 /* Casts 'base' into 'struct vtep_ctl_context'. */
@@ -887,7 +896,10 @@ pre_get_info(struct ctl_context *ctx)
                          &vteprec_physical_locator_col_dst_ip);
     ovsdb_idl_add_column(ctx->idl,
                          &vteprec_physical_locator_col_encapsulation_type);
-
+    ovsdb_idl_add_column(ctx->idl,
+                         &vteprec_physical_locator_col_tunnel_key);
+    ovsdb_idl_add_column(ctx->idl,
+                         &vteprec_physical_locator_col_tunnel_level);
     ovsdb_idl_add_column(ctx->idl, &vteprec_tunnel_col_local);
     ovsdb_idl_add_column(ctx->idl, &vteprec_tunnel_col_remote);
 }
@@ -1648,34 +1660,75 @@ cmd_lr_exists(struct ctl_context *ctx)
     }
 }
 
+inline void
+parse_add_mac_args(struct ctl_context *ctx, struct add_mac_args* args)
+{
+    ovs_be32 ip = 0;
+    if (ctx->argc < 4 ) {
+      ctl_fatal("invalid argument set only %d args supplied",ctx->argc);
+  
+    }
+    int index = 2;
+    args->mac = ctx->argv[index];
+    /* check 3rd argument if its ip assume vxlan_over_ipv4
+     * else take the encapsulation from supplied argument
+     */
+    if (!ip_parse(ctx->argv[++index], &ip)) {
+        args->encap = ctx->argv[index++];
+    } else {
+        args->encap = "vxlan_over_ipv4";
+    }
+    args->dst_ip = ctx->argv[index];
+    /* if no more arguments supplied prsing is done
+     */
+    if (ctx->argc == ++index) {
+        return;
+    }
+    /* check for optional tunnel_key
+     */
+    args->tunnel_key = ctx->argv[index];
+    if (ctx->argc == ++index) {
+        return;
+    }
+    /* tunnel level can be given only if tunnel key is provided
+     */
+    args->tunnel_level = ctx->argv[index];
+    if (ctx->argc == ++index) {
+        return;
+    }
+    ctl_fatal("Unexpected number of argument %d", index);
+}
+
 static void
 add_ucast_entry(struct ctl_context *ctx, bool local)
 {
     struct vtep_ctl_context *vtepctl_ctx = vtep_ctl_context_cast(ctx);
     struct vtep_ctl_lswitch *ls;
-    const char *mac;
-    const char *encap;
-    const char *dst_ip;
+    struct add_mac_args args;
+    memset(&args,0,sizeof(args));
+    int64_t tunnel_scope_key = 0;
+
     struct vteprec_physical_locator *ploc_cfg;
 
     vtep_ctl_context_populate_cache(ctx);
 
     ls = find_lswitch(vtepctl_ctx, ctx->argv[1], true);
-    mac = ctx->argv[2];
-
-    if (ctx->argc == 4) {
-        encap = "vxlan_over_ipv4";
-        dst_ip = ctx->argv[3];
-    } else {
-        encap = ctx->argv[3];
-        dst_ip = ctx->argv[4];
-    }
-
-    ploc_cfg = find_ploc(vtepctl_ctx, encap, dst_ip);
+    parse_add_mac_args(ctx,&args);
+    ploc_cfg = find_ploc(vtepctl_ctx, args.encap, args.dst_ip);
     if (!ploc_cfg) {
         ploc_cfg = vteprec_physical_locator_insert(ctx->txn);
-        vteprec_physical_locator_set_dst_ip(ploc_cfg, dst_ip);
-        vteprec_physical_locator_set_encapsulation_type(ploc_cfg, encap);
+        if (args.tunnel_key) {
+            ovs_scan(args.tunnel_key,"%ld",&tunnel_scope_key);
+            vteprec_physical_locator_set_tunnel_key(ploc_cfg,
+                                                    &tunnel_scope_key,1);
+            if (args.tunnel_level){
+                vteprec_physical_locator_set_tunnel_level(ploc_cfg,
+                                                          args.tunnel_level);
+            }
+
+        }
+        vteprec_physical_locator_set_dst_ip(ploc_cfg,args.dst_ip);
+        vteprec_physical_locator_set_encapsulation_type(ploc_cfg, args.encap);
 
         add_ploc_to_cache(vtepctl_ctx, ploc_cfg);
     }
@@ -1683,23 +1736,23 @@ add_ucast_entry(struct ctl_context *ctx, bool local)
     if (local) {
         struct vteprec_ucast_macs_local *ucast_cfg;
 
-        ucast_cfg = shash_find_data(&ls->ucast_local, mac);
+        ucast_cfg = shash_find_data(&ls->ucast_local, args.mac);
         if (!ucast_cfg) {
             ucast_cfg = vteprec_ucast_macs_local_insert(ctx->txn);
-            vteprec_ucast_macs_local_set_MAC(ucast_cfg, mac);
+            vteprec_ucast_macs_local_set_MAC(ucast_cfg, args.mac);
             vteprec_ucast_macs_local_set_logical_switch(ucast_cfg, ls->ls_cfg);
-            shash_add(&ls->ucast_local, mac, ucast_cfg);
+            shash_add(&ls->ucast_local, args.mac, ucast_cfg);
         }
         vteprec_ucast_macs_local_set_locator(ucast_cfg, ploc_cfg);
     } else {
         struct vteprec_ucast_macs_remote *ucast_cfg;
 
-        ucast_cfg = shash_find_data(&ls->ucast_remote, mac);
+        ucast_cfg = shash_find_data(&ls->ucast_remote, args.mac);
         if (!ucast_cfg) {
             ucast_cfg = vteprec_ucast_macs_remote_insert(ctx->txn);
-            vteprec_ucast_macs_remote_set_MAC(ucast_cfg, mac);
+            vteprec_ucast_macs_remote_set_MAC(ucast_cfg, args.mac);
             vteprec_ucast_macs_remote_set_logical_switch(ucast_cfg, ls->ls_cfg);
-            shash_add(&ls->ucast_remote, mac, ucast_cfg);
+            shash_add(&ls->ucast_remote, args.mac, ucast_cfg);
         }
         vteprec_ucast_macs_remote_set_locator(ucast_cfg, ploc_cfg);
     }
@@ -1790,7 +1843,8 @@ commit_mcast_entries(struct vtep_ctl_mcast_mac *mcast_mac)
 static void
 add_mcast_entry(struct ctl_context *ctx,
                 struct vtep_ctl_lswitch *ls, const char *mac,
-                const char *encap, const char *dst_ip, bool local)
+                const char *encap, const char *dst_ip, const char* tunnel_key,
+                const char* tunnel_scope, bool local)
 {
     struct vtep_ctl_context *vtepctl_ctx = vtep_ctl_context_cast(ctx);
     struct shash *mcast_shash;
@@ -1839,6 +1893,16 @@ add_mcast_entry(struct ctl_context *ctx,
     ploc_cfg = find_ploc(vtepctl_ctx, encap, dst_ip);
     if (!ploc_cfg) {
         ploc_cfg = vteprec_physical_locator_insert(ctx->txn);
+        if (tunnel_key) {
+            int64_t tunnel_scope_key = 0;
+            ovs_scan(tunnel_key,"%ld",&tunnel_scope_key);
+            vteprec_physical_locator_set_tunnel_key(ploc_cfg,
+                                                    &tunnel_scope_key,1);
+            if (tunnel_scope){
+                vteprec_physical_locator_set_tunnel_level(ploc_cfg,
+                                                          tunnel_scope);
+            }
+        }
         vteprec_physical_locator_set_dst_ip(ploc_cfg, dst_ip);
         vteprec_physical_locator_set_encapsulation_type(ploc_cfg, encap);
 
@@ -1908,27 +1972,18 @@ add_del_mcast_entry(struct ctl_context *ctx, bool add, bool local)
 {
     struct vtep_ctl_context *vtepctl_ctx = vtep_ctl_context_cast(ctx);
     struct vtep_ctl_lswitch *ls;
-    const char *mac;
-    const char *encap;
-    const char *dst_ip;
+    struct add_mac_args args;
+    memset(&args,0,sizeof(args));
+    
 
     vtep_ctl_context_populate_cache(ctx);
 
     ls = find_lswitch(vtepctl_ctx, ctx->argv[1], true);
-    mac = ctx->argv[2];
-
-    if (ctx->argc == 4) {
-        encap = "vxlan_over_ipv4";
-        dst_ip = ctx->argv[3];
-    } else {
-        encap = ctx->argv[3];
-        dst_ip = ctx->argv[4];
-    }
-
+    parse_add_mac_args(ctx,&args);
     if (add) {
-        add_mcast_entry(ctx, ls, mac, encap, dst_ip, local);
+        add_mcast_entry(ctx, ls, args.mac, args.encap, args.dst_ip, args.tunnel_key,args.tunnel_level, local);
     } else {
-        del_mcast_entry(ctx, ls, mac, encap, dst_ip, local);
+        del_mcast_entry(ctx, ls, args.mac, args.encap, args.dst_ip, local);
     }
 
     vtep_ctl_context_invalidate_cache(ctx);
@@ -2017,7 +2072,8 @@ list_macs(struct ctl_context *ctx, bool local)
     struct svec ucast_macs;
     struct shash *mcast_shash;
     struct svec mcast_macs;
-
+    char tunnel_key[10];
+    char tunnel_level[10];
     vtep_ctl_context_populate_cache(ctx);
     ls = find_lswitch(vtepctl_ctx, ctx->argv[1], true);
 
@@ -2032,9 +2088,21 @@ list_macs(struct ctl_context *ctx, bool local)
         char *entry;
 
         ploc_cfg = local ? ucast_local->locator : ucast_remote->locator;
-
-        entry = xasprintf("  %s -> %s/%s", node->name,
-                          ploc_cfg->encapsulation_type, ploc_cfg->dst_ip);
+        tunnel_key[0] = '\0';
+        if (ploc_cfg->tunnel_key) {
+            snprintf(&tunnel_key[0], 10, " %d",
+                     (uint32_t)(*ploc_cfg->tunnel_key));
+        }
+        if (ploc_cfg->tunnel_level) {
+            snprintf(tunnel_level, 10, " %s", ploc_cfg->tunnel_level);
+        } else {
+            tunnel_level[0] = '\0';
+        }
+        entry = xasprintf("  %s -> %s/%s%s%s", node->name,
+                          ploc_cfg->encapsulation_type,
+                          ploc_cfg->dst_ip,
+                          tunnel_key,
+                          tunnel_level);
         svec_add_nocopy(&ucast_macs, entry);
     }
     ds_put_format(&ctx->output, "ucast-mac-%s\n", local ? "local" : "remote");
@@ -2049,9 +2117,22 @@ list_macs(struct ctl_context *ctx, bool local)
         char *entry;
 
         LIST_FOR_EACH (ploc, locators_node, &mcast_mac->locators) {
-            entry = xasprintf("  %s -> %s/%s", node->name,
+            tunnel_key[0] = '\0';
+            if (ploc->ploc_cfg->tunnel_key) {
+                snprintf(tunnel_key, 10, " %d",
+                         (uint32_t)(*ploc->ploc_cfg->tunnel_key));
+            }
+            if (ploc->ploc_cfg->tunnel_level) {
+                snprintf(tunnel_level, 10, " %s",
+                         ploc->ploc_cfg->tunnel_level);
+            } else {
+                tunnel_level[0] = '\0';
+            }
+            entry = xasprintf("  %s -> %s/%s%s%s", node->name,
                               ploc->ploc_cfg->encapsulation_type,
-                              ploc->ploc_cfg->dst_ip);
+                              ploc->ploc_cfg->dst_ip,
+                              tunnel_key,
+                              tunnel_level);
             svec_add_nocopy(&mcast_macs, entry);
         }
     }
@@ -2508,11 +2589,11 @@ static const struct ctl_command_syntax vtep_commands[] = {
     {"lr-exists", 1, 1, NULL, pre_get_info, cmd_lr_exists, NULL, "", RO},
 
     /* MAC binding commands. */
-    {"add-ucast-local", 3, 4, NULL, pre_get_info, cmd_add_ucast_local, NULL,
+    {"add-ucast-local", 3, 6, NULL, pre_get_info, cmd_add_ucast_local, NULL,
      "", RW},
     {"del-ucast-local", 2, 2, NULL, pre_get_info, cmd_del_ucast_local, NULL,
      "", RW},
-    {"add-mcast-local", 3, 4, NULL, pre_get_info, cmd_add_mcast_local, NULL,
+    {"add-mcast-local", 3, 6, NULL, pre_get_info, cmd_add_mcast_local, NULL,
      "", RW},
     {"del-mcast-local", 3, 4, NULL, pre_get_info, cmd_del_mcast_local, NULL,
      "", RW},
@@ -2520,11 +2601,11 @@ static const struct ctl_command_syntax vtep_commands[] = {
      "", RO},
     {"list-local-macs", 1, 1, NULL, pre_get_info, cmd_list_local_macs, NULL,
      "", RO},
-    {"add-ucast-remote", 3, 4, NULL, pre_get_info, cmd_add_ucast_remote, NULL,
+    {"add-ucast-remote", 3, 6, NULL, pre_get_info, cmd_add_ucast_remote, NULL,
      "", RW},
     {"del-ucast-remote", 2, 2, NULL, pre_get_info, cmd_del_ucast_remote, NULL,
      "", RW},
-    {"add-mcast-remote", 3, 4, NULL, pre_get_info, cmd_add_mcast_remote, NULL,
+    {"add-mcast-remote", 3, 6, NULL, pre_get_info, cmd_add_mcast_remote, NULL,
      "", RW},
     {"del-mcast-remote", 3, 4, NULL, pre_get_info, cmd_del_mcast_remote, NULL,
      "", RW},

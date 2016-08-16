@@ -33,6 +33,12 @@ import six
 
 
 VERSION = "0.99"
+MACS_MAC_INDEX = 1
+MACS_ENCAP_INDEX = 2
+MACS_DEST_IP_INDEX = 3
+MACS_KEY_INDEX = 4
+MACS_LEVEL_INDEX = 5
+MACS_NUM_OF_FIELDS = 7
 
 root_prefix = ""
 
@@ -120,30 +126,54 @@ class Logical_Switch(object):
         for port_no, tun_name, remote_ip in six.itervalues(self.tunnels):
             del_bfd(remote_ip)
 
-    def update_flood(self):
-        flood_ports = list(self.ports.values())
+    def vtep_ports(self, tunnel_list):
+        level0_ports = []
+        level1_ports = []
+        for tunnel in tunnel_list:
+            if self.tunnels[tunnel][4] is 'level1':
+                level1_ports.append(self.tunnels[tunnel][0])
+            else:
+                level0_ports.append(self.tunnels[tunnel][0])
+        return level1_ports, level0_ports
 
-        # Traffic flowing from one 'unknown-dst' should not be flooded to
-        # port belonging to another 'unknown-dst'.
-        for tunnel in self.unknown_dsts:
-            port_no = self.tunnels[tunnel][0]
-            ovs_ofctl("add-flow %s table=1,priority=1,in_port=%s,action=%s"
-                      % (self.short_name, port_no, ",".join(flood_ports)))
+    def update_flood(self):
+        phy_ports = list(self.ports.values())
+        level1_ports, level0_ports = self.vtep_ports(self.tunnels.keys())
+        level1_unknown, level0_unknown = self.vtep_ports(self.unknown_dsts)
 
         # Traffic coming from a VTEP physical port should always be flooded to
         # all the other physical ports that belong to that VTEP device and
-        # this logical switch.  If the replication mode is service node then
+        # this logical switch and all level1 VTEP ports.
+        # If the level0 replication mode is service node then
         # send to one unknown_dst node (the first one here); else we assume the
         # replication mode is source node and we send the packet to all
         # unknown_dst nodes.
-        for tunnel in self.unknown_dsts:
-            port_no = self.tunnels[tunnel][0]
-            flood_ports.append(port_no)
-            if self.replication_mode == "service_node":
-                break
 
-        ovs_ofctl("add-flow %s table=1,priority=0,action=%s"
-                  % (self.short_name, ",".join(flood_ports)))
+        phy_flood_ports = phy_ports + level1_unknown
+        if len(level0_unknown) > 0:
+            if self.replication_mode == "service_node":
+                phy_flood_ports += level0_unknown[0]
+            else:
+                phy_flood_ports += level0_unknown
+        for port_no in phy_ports:
+            ovs_ofctl("add-flow %s table=1,priority=1,in_port=%s,action=%s"
+                      % (self.short_name, port_no, ",".join(phy_flood_ports)))
+
+        # Traffic flowing from a level0 VTEP should not be flooded to level0
+        # unknown-dst ports
+        level0_flood_ports = phy_ports + level1_unknown
+        for port_no in level0_ports:
+            ovs_ofctl("add-flow %s table=1,priority=1,in_port=%s,action=%s"
+                      % (self.short_name, port_no,
+                         ",".join(level0_flood_ports)))
+
+        # Traffic flowing from a level1 VTEP should not be flooded to level1
+        # unknown-dst ports
+        level1_flood_ports = phy_ports + level0_unknown
+        for port_no in level1_ports:
+            ovs_ofctl("add-flow %s table=1,priority=1,in_port=%s,action=%s"
+                      % (self.short_name,
+                          port_no, ",".join(level1_flood_ports)))
 
     def add_lbinding(self, lbinding):
         vlog.info("adding %s binding to %s" % (lbinding, self.name))
@@ -164,14 +194,12 @@ class Logical_Switch(object):
         del self.ports[lbinding]
         self.update_flood()
 
-    def add_tunnel(self, tunnel, tunnel_key):
+    def add_tunnel(self, ip, tunnel_key, tunnel_level):
         global tun_id
-        vlog.info("adding tunnel %s" % tunnel)
-        encap, ip = tunnel.split("/")
 
-        if encap != "vxlan_over_ipv4":
-            vlog.warn("unsupported tunnel format %s" % encap)
-            return
+        vlog.info("adding tunnel: ip %s key %s %s" %
+                  (ip, tunnel_key,
+                   'level1' if tunnel_level is 'level1' else 'level0'))
 
         tun_id += 1
         tun_name = "vx" + str(tun_id)
@@ -185,14 +213,14 @@ class Logical_Switch(object):
             if port_no != "-1":
                 break
             elif i == 9:
-                vlog.warn("couldn't create tunnel %s" % tunnel)
+                vlog.warn("couldn't create tunnel %s" % ip)
                 ovs_vsctl("del-port %s %s" % (self.short_name, tun_name))
                 return
 
             # Give the system a moment to allocate the port number
             time.sleep(0.5)
 
-        self.tunnels[tunnel] = (port_no, tun_name, ip)
+        self.tunnels[ip] = (port_no, tun_name, ip, tunnel_key, tunnel_level)
 
         add_bfd(ip)
 
@@ -200,17 +228,18 @@ class Logical_Switch(object):
                   "actions=resubmit(,1)"
                   % (self.short_name, port_no))
 
-    def del_tunnel(self, tunnel):
-        vlog.info("removing tunnel %s" % tunnel)
+    def del_tunnel(self, tunnel_ip):
+        vlog.info("removing tunnel %s" % tunnel_ip)
 
-        port_no, tun_name, remote_ip = self.tunnels[tunnel]
+        (port_no, tun_name,
+        remote_ip, tunnel_key, tunnel_level) = self.tunnels[tunnel_ip]
         ovs_ofctl("del-flows %s table=0,in_port=%s"
                   % (self.short_name, port_no))
         ovs_vsctl("del-port %s %s" % (self.short_name, tun_name))
 
         del_bfd(remote_ip)
 
-        del self.tunnels[tunnel]
+        del self.tunnels[tunnel_ip]
 
     def update_local_macs(self):
         flows = ovs_ofctl("dump-flows %s cookie=0x5000/-1,table=1"
@@ -231,8 +260,8 @@ class Logical_Switch(object):
 
         self.local_macs = macs
 
-    def add_remote_mac(self, mac, tunnel):
-        port_no = self.tunnels.get(tunnel, (0, ""))[0]
+    def add_remote_mac(self, mac, tunnel_ip):
+        port_no = self.tunnels.get(tunnel_ip, (0, ""))[0]
         if not port_no:
             return
 
@@ -245,7 +274,8 @@ class Logical_Switch(object):
     def update_remote_macs(self):
         remote_macs = {}
         unknown_dsts = set()
-        tunnels = set()
+        # A map of tunnel ip address to tunnel key and tunnel level
+        tunnels = {}
         parse_ucast = True
 
         column = vtep_ctl("--columns=tunnel_key find logical_switch "
@@ -264,28 +294,32 @@ class Logical_Switch(object):
             if (line.find("mcast-mac-remote") != -1):
                 parse_ucast = False
                 continue
-
-            entry = re.split(r'  (.*) -> (.*)', line)
-            if len(entry) != 4:
+            entry = re.split(r'  (.*) -> ([^/]*)/(\S*)\s?(\d+)?\s?(.*)?',
+                             line)
+            if len(entry) != MACS_NUM_OF_FIELDS:
                 continue
 
             if parse_ucast:
-                remote_macs[entry[1]] = entry[2]
+                remote_macs[entry[MACS_MAC_INDEX]] = entry[MACS_ENCAP_INDEX]
             else:
-                if entry[1] != "unknown-dst":
+                if entry[MACS_MAC_INDEX] != "unknown-dst":
                     continue
 
-                unknown_dsts.add(entry[2])
+                unknown_dsts.add(entry[MACS_DEST_IP_INDEX])
 
-            tunnels.add(entry[2])
+            tunnels[entry[MACS_DEST_IP_INDEX]] = (entry[MACS_KEY_INDEX],
+                                                  entry[MACS_LEVEL_INDEX])
+        old_tunnel_ips = set(self.tunnels.keys())
+        tunnel_ips = set(tunnels.keys())
+        for tunnel_ip in tunnel_ips.difference(old_tunnel_ips):
+            if tunnels[tunnel_ip][0]:
+                tunnel_scope_key = tunnels[tunnel_ip][0]
+            else:
+                tunnel_scope_key = tunnel_key
+            self.add_tunnel(tunnel_ip, tunnel_scope_key, tunnels[tunnel_ip][1])
 
-        old_tunnels = set(self.tunnels.keys())
-
-        for tunnel in tunnels.difference(old_tunnels):
-            self.add_tunnel(tunnel, tunnel_key)
-
-        for tunnel in old_tunnels.difference(tunnels):
-            self.del_tunnel(tunnel)
+        for tunnel_ip in old_tunnel_ips.difference(tunnel_ips):
+            self.del_tunnel(tunnel_ip)
 
         for mac in six.iterkeys(remote_macs):
             if (self.remote_macs.get(mac) != remote_macs[mac]):
