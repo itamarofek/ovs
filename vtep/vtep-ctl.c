@@ -332,7 +332,7 @@ Logical Switch commands:\n\
   add-ls LS                   create a new logical switch named LS\n\
   del-ls LS                   delete LS and all of its ports\n\
   list-ls                     print the names of all the logical switches\n\
-  ls-exists LS                exit 2 if LS does not exist\n\
+  ls-exists LS                exit 2 if LS does not exist\n\/`
   bind-ls PS PORT VLAN LS     bind LS to VLAN on PORT\n\
   unbind-ls PS PORT VLAN      unbind logical switch on VLAN from PORT\n\
   list-bindings PS PORT       list bindings for PORT on PS\n\
@@ -452,13 +452,6 @@ struct vtep_ctl_context {
                              * struct vtep_ctl_lrouter. */
 };
 
-struct add_mac_args {
-    const char *mac;
-    const char *encap;
-    const char *dst_ip;
-    const char *tunnel_key;
-    const char *tunnel_level;
-};
 
 /* Casts 'base' into 'struct vtep_ctl_context'. */
 static struct vtep_ctl_context *
@@ -1660,38 +1653,51 @@ cmd_lr_exists(struct ctl_context *ctx)
     }
 }
 
+struct add_mac_args {
+    const char *mac;
+    const char *encap;
+    const char *dst_ip;
+    const char *tunnel_key;
+    const char *tunnel_level;
+};
+/*LS MAC [ENCAP] IP [KEY [LEVEL]] */
 inline void
 parse_add_mac_args(struct ctl_context *ctx, struct add_mac_args* args)
 {
-    ovs_be32 ip = 0;
+    /* This code is assumes a specific location for each "arg" argument,
+     * with a minumim argument list of 4 according to the following format.
+     * arg[0]: Command, arg[1]:LogicalSwitch, arg[2]: MAC 
+     * arg[3] optionally tunnel ENCAP or peer IP.
+     * When there are 5 arguments,If arg[3] is ENCAP  arg[4] must be IP,
+     * else arg[4] is tunnel key.
+     * When there are 6 arguments, if arg[4] is ip, arg[5] is the tunnel key,
+     * else it is the tunnel level.
+     * When there are 7 arguments, arg[6] is the tunnel level. */ 
     if (ctx->argc < 4 ) {
       ctl_fatal("invalid argument set only %d args supplied",ctx->argc);
   
     }
     int index = 2;
     args->mac = ctx->argv[index];
-    /* check 3rd argument if its ip assume vxlan_over_ipv4
-     * else take the encapsulation from supplied argument
-     */
+    /* Check 3rd argument if its ip assume vxlan_over_ipv4
+     * else take the encapsulation from supplied argument */
+    ovs_be32 ip = 0;
     if (!ip_parse(ctx->argv[++index], &ip)) {
         args->encap = ctx->argv[index++];
     } else {
         args->encap = "vxlan_over_ipv4";
     }
     args->dst_ip = ctx->argv[index];
-    /* if no more arguments supplied prsing is done
-     */
+    /* If no more arguments supplied parsing is done */
     if (ctx->argc == ++index) {
         return;
     }
-    /* check for optional tunnel_key
-     */
+    /* Check for optional tunnel_key */
     args->tunnel_key = ctx->argv[index];
     if (ctx->argc == ++index) {
         return;
     }
-    /* tunnel level can be given only if tunnel key is provided
-     */
+    /* Tunnel level can be given only if tunnel key is provided */
     args->tunnel_level = ctx->argv[index];
     if (ctx->argc == ++index) {
         return;
@@ -1705,8 +1711,7 @@ add_ucast_entry(struct ctl_context *ctx, bool local)
     struct vtep_ctl_context *vtepctl_ctx = vtep_ctl_context_cast(ctx);
     struct vtep_ctl_lswitch *ls;
     struct add_mac_args args;
-    memset(&args,0,sizeof(args));
-    int64_t tunnel_scope_key = 0;
+    memset(&args,0,sizeof args);
 
     struct vteprec_physical_locator *ploc_cfg;
 
@@ -1718,10 +1723,10 @@ add_ucast_entry(struct ctl_context *ctx, bool local)
     if (!ploc_cfg) {
         ploc_cfg = vteprec_physical_locator_insert(ctx->txn);
         if (args.tunnel_key) {
-            ovs_scan(args.tunnel_key,"%ld",&tunnel_scope_key);
+            int64_t tunnel_scope_key = str_to_llong(args.tunnel_key);
             vteprec_physical_locator_set_tunnel_key(ploc_cfg,
                                                     &tunnel_scope_key,1);
-            if (args.tunnel_level){
+            if (args.tunnel_level) {
                 vteprec_physical_locator_set_tunnel_level(ploc_cfg,
                                                           args.tunnel_level);
             }
