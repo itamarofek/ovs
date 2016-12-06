@@ -263,12 +263,16 @@ Remove the local unicast Ethernet address \fImac\fR map from
 \fIlswitch\fR.  The local mappings are used by the VTEP to refer to MACs
 learned on its physical ports.
 .
-.IP "\fBadd\-mcast\-local \fIlswitch mac\fR [\fIencap\fR] \fIip\fR"
+.IP "\fBadd\-mcast\-local \fIlswitch mac\fR [\fIencap\fR] \fIip\fR [\fIkey\fR
+[\fIlevel\fR]]"
 Add physical location \fIip\fR using encapsulation \fIencap\fR to the
 local mac binding table for multicast Ethernet address \fImac\fR on
-\fIlswitch\fR.  If \fIencap\fR is not specified, the default is
-"vxlan_over_ipv4".  The local mappings are used by the VTEP to refer to
-MACs learned on its physical ports.
+\fIlswitch\fR with tunnel identifier equals to \fIkey\fR at BUM 
+unknown unicast and multicast distribution level [\fIlevel\fR. If \fIencap\fR
+is not specified, the default is "vxlan_over_ipv4". If \fIkey\fR is not
+specified the default is \fIlswitch\fR tunnel key. If [\fIlevel\fR is not
+specified the default is "level0". The local mappings are used by the VTEP
+to refer to MACs learned on its physical ports.
 .
 .IP "\fBdel\-mcast\-local \fIlswitch mac\fR [\fIencap\fR] \fIip\fR"
 Remove physical location \fIip\fR using encapsulation \fIencap\fR from
@@ -288,12 +292,15 @@ These commands examine and manipulate local and remote MAC bindings for
 the logical switch.  The remote maps are written by the network
 virtualization controller to refer to MACs that it has learned.
 .
-.IP "\fBadd\-ucast\-remote \fIlswitch mac\fR [\fIencap\fR] \fIip\fR"
+.IP "\fBadd\-ucast\-remote \fIlswitch mac\fR [\fIencap\fR] \fIip\fR [\fIkey\fR
+[\fIlevel\fR]]"
 Map the unicast Ethernet address \fImac\fR to the physical location
-\fIip\fR using encapsulation \fIencap\fR on \fIlswitch\fR.  If
-\fIencap\fR is not specified, the default is "vxlan_over_ipv4".  The
-remote mappings are used by the network virtualization platform to refer
-to MACs that it has learned.
+\fIip\fR using encapsulation \fIencap\fR on \fIlswitch\fR with tunnel
+identifier equals to \fIkey\fR at distribution level [\fIlevel\fR. 
+If \fIencap\fR is not specified, the default is "vxlan_over_ipv4". If \fIkey\fR
+is not specified the default is \fIlswitch\fR tunnel key. If [\fIlevel\fR is not
+specified the default is "level0". The remote mappings are used by the network
+virtualization platform to refer to MACs that it has learned.
 .
 .IP "\fBdel\-ucast\-remote \fIlswitch mac\fR"
 Remove the remote unicast Ethernet address \fImac\fR map from

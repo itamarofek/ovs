@@ -332,7 +332,7 @@ Logical Switch commands:\n\
   add-ls LS                   create a new logical switch named LS\n\
   del-ls LS                   delete LS and all of its ports\n\
   list-ls                     print the names of all the logical switches\n\
-  ls-exists LS                exit 2 if LS does not exist\n\/`
+  ls-exists LS                exit 2 if LS does not exist\n\
   bind-ls PS PORT VLAN LS     bind LS to VLAN on PORT\n\
   unbind-ls PS PORT VLAN      unbind logical switch on VLAN from PORT\n\
   list-bindings PS PORT       list bindings for PORT on PS\n\
@@ -1660,8 +1660,8 @@ struct add_mac_args {
     const char *tunnel_key;
     const char *tunnel_level;
 };
-/*LS MAC [ENCAP] IP [KEY [LEVEL]] */
-inline void
+
+inline static void
 parse_add_mac_args(struct ctl_context *ctx, struct add_mac_args* args)
 {
     /* This code is assumes a specific location for each "arg" argument,
@@ -1710,8 +1710,8 @@ add_ucast_entry(struct ctl_context *ctx, bool local)
 {
     struct vtep_ctl_context *vtepctl_ctx = vtep_ctl_context_cast(ctx);
     struct vtep_ctl_lswitch *ls;
-    struct add_mac_args args;
-    memset(&args,0,sizeof args);
+    struct add_mac_args args = {0};
+   /* memset(&args,0,sizeof args);*/
 
     struct vteprec_physical_locator *ploc_cfg;
 
@@ -1723,7 +1723,8 @@ add_ucast_entry(struct ctl_context *ctx, bool local)
     if (!ploc_cfg) {
         ploc_cfg = vteprec_physical_locator_insert(ctx->txn);
         if (args.tunnel_key) {
-            int64_t tunnel_scope_key = str_to_llong(args.tunnel_key);
+            int64_t tunnel_scope_key = 0;
+            ovs_scan(args.tunnel_key,"%ld",&tunnel_scope_key);
             vteprec_physical_locator_set_tunnel_key(ploc_cfg,
                                                     &tunnel_scope_key,1);
             if (args.tunnel_level) {
@@ -1847,9 +1848,11 @@ commit_mcast_entries(struct vtep_ctl_mcast_mac *mcast_mac)
 
 static void
 add_mcast_entry(struct ctl_context *ctx,
-                struct vtep_ctl_lswitch *ls, const char *mac,
+                struct vtep_ctl_lswitch *ls, 
+                /*
+                const char *mac,
                 const char *encap, const char *dst_ip, const char* tunnel_key,
-                const char* tunnel_scope, bool local)
+                const char* tunnel_scope,*/ bool local)
 {
     struct vtep_ctl_context *vtepctl_ctx = vtep_ctl_context_cast(ctx);
     struct shash *mcast_shash;
@@ -1861,15 +1864,17 @@ add_mcast_entry(struct ctl_context *ctx,
 
     /* Physical locator sets are immutable, so allocate a new one. */
     ploc_set_cfg = vteprec_physical_locator_set_insert(ctx->txn);
-
-    mcast_mac = shash_find_data(mcast_shash, mac);
+    struct add_mac_args args = {0};
+    /* memset(&args,0,sizeof args); */
+    parse_add_mac_args(ctx,&args);
+    mcast_mac = shash_find_data(mcast_shash, args.mac);
     if (!mcast_mac) {
-        mcast_mac = add_mcast_mac_to_cache(vtepctl_ctx, ls, mac, ploc_set_cfg,
-                                           local);
+        mcast_mac = add_mcast_mac_to_cache(vtepctl_ctx, ls, args.mac,
+                                           ploc_set_cfg, local);
 
         if (local) {
             mcast_mac->local_cfg = vteprec_mcast_macs_local_insert(ctx->txn);
-            vteprec_mcast_macs_local_set_MAC(mcast_mac->local_cfg, mac);
+            vteprec_mcast_macs_local_set_MAC(mcast_mac->local_cfg, args.mac);
             vteprec_mcast_macs_local_set_locator_set(mcast_mac->local_cfg,
                                                      ploc_set_cfg);
             vteprec_mcast_macs_local_set_logical_switch(mcast_mac->local_cfg,
@@ -1877,7 +1882,7 @@ add_mcast_entry(struct ctl_context *ctx,
             mcast_mac->remote_cfg = NULL;
         } else {
             mcast_mac->remote_cfg = vteprec_mcast_macs_remote_insert(ctx->txn);
-            vteprec_mcast_macs_remote_set_MAC(mcast_mac->remote_cfg, mac);
+            vteprec_mcast_macs_remote_set_MAC(mcast_mac->remote_cfg,args.mac);
             vteprec_mcast_macs_remote_set_locator_set(mcast_mac->remote_cfg,
                                                       ploc_set_cfg);
             vteprec_mcast_macs_remote_set_logical_switch(mcast_mac->remote_cfg,
@@ -1895,21 +1900,21 @@ add_mcast_entry(struct ctl_context *ctx,
         }
     }
 
-    ploc_cfg = find_ploc(vtepctl_ctx, encap, dst_ip);
+    ploc_cfg = find_ploc(vtepctl_ctx, args.encap, args.dst_ip);
     if (!ploc_cfg) {
         ploc_cfg = vteprec_physical_locator_insert(ctx->txn);
-        if (tunnel_key) {
+        if (args.tunnel_key) {
             int64_t tunnel_scope_key = 0;
-            ovs_scan(tunnel_key,"%ld",&tunnel_scope_key);
+            ovs_scan(args.tunnel_key,"%ld",&tunnel_scope_key);
             vteprec_physical_locator_set_tunnel_key(ploc_cfg,
                                                     &tunnel_scope_key,1);
-            if (tunnel_scope){
+            if (args.tunnel_level){
                 vteprec_physical_locator_set_tunnel_level(ploc_cfg,
-                                                          tunnel_scope);
+                                                          args.tunnel_level);
             }
         }
-        vteprec_physical_locator_set_dst_ip(ploc_cfg, dst_ip);
-        vteprec_physical_locator_set_encapsulation_type(ploc_cfg, encap);
+        vteprec_physical_locator_set_dst_ip(ploc_cfg, args.dst_ip);
+        vteprec_physical_locator_set_encapsulation_type(ploc_cfg, args.encap);
 
         add_ploc_to_cache(vtepctl_ctx, ploc_cfg);
     }
@@ -1920,23 +1925,29 @@ add_mcast_entry(struct ctl_context *ctx,
 
 static void
 del_mcast_entry(struct ctl_context *ctx,
-                struct vtep_ctl_lswitch *ls, const char *mac,
-                const char *encap, const char *dst_ip, bool local)
+                struct vtep_ctl_lswitch *ls,
+                /*
+                const char *mac,
+                const char *encap, const char *dst_ip,
+                */
+                bool local)
 {
     struct vtep_ctl_context *vtepctl_ctx = vtep_ctl_context_cast(ctx);
     struct vtep_ctl_mcast_mac *mcast_mac;
     struct shash *mcast_shash;
     struct vteprec_physical_locator *ploc_cfg;
     struct vteprec_physical_locator_set *ploc_set_cfg;
+    struct add_mac_args args = {0};
 
     mcast_shash = local ? &ls->mcast_local : &ls->mcast_remote;
-
-    mcast_mac = shash_find_data(mcast_shash, mac);
+    
+    parse_add_mac_args(ctx,&args);
+    mcast_mac = shash_find_data(mcast_shash, args.mac);
     if (!mcast_mac) {
         return;
     }
 
-    ploc_cfg = find_ploc(vtepctl_ctx, encap, dst_ip);
+    ploc_cfg = find_ploc(vtepctl_ctx, args.encap, args.dst_ip);
     if (!ploc_cfg) {
         /* Couldn't find the physical locator, so just ignore. */
         return;
@@ -1948,7 +1959,7 @@ del_mcast_entry(struct ctl_context *ctx,
 
     del_ploc_from_mcast_mac(mcast_mac, ploc_cfg);
     if (ovs_list_is_empty(&mcast_mac->locators)) {
-        struct shash_node *node = shash_find(mcast_shash, mac);
+        struct shash_node *node = shash_find(mcast_shash, args.mac);
 
         vteprec_physical_locator_set_delete(ploc_set_cfg);
 
@@ -1977,18 +1988,19 @@ add_del_mcast_entry(struct ctl_context *ctx, bool add, bool local)
 {
     struct vtep_ctl_context *vtepctl_ctx = vtep_ctl_context_cast(ctx);
     struct vtep_ctl_lswitch *ls;
+    /*
     struct add_mac_args args;
     memset(&args,0,sizeof(args));
-    
+    */
 
     vtep_ctl_context_populate_cache(ctx);
 
     ls = find_lswitch(vtepctl_ctx, ctx->argv[1], true);
-    parse_add_mac_args(ctx,&args);
+    /*parse_add_mac_args(ctx,&args);*/
     if (add) {
-        add_mcast_entry(ctx, ls, args.mac, args.encap, args.dst_ip, args.tunnel_key,args.tunnel_level, local);
+        add_mcast_entry(ctx, ls/*, args.mac, args.encap, args.dst_ip, args.tunnel_key,args.tunnel_level*/, local);
     } else {
-        del_mcast_entry(ctx, ls, args.mac, args.encap, args.dst_ip, local);
+        del_mcast_entry(ctx, ls/*, args.mac, args.encap, args.dst_ip*/, local);
     }
 
     vtep_ctl_context_invalidate_cache(ctx);
