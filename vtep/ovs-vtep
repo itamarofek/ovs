@@ -18,6 +18,8 @@
 
 import argparse
 from pyroute2 import IPDB
+import codecs
+import ipaddress
 import os
 import re
 import shlex
@@ -211,7 +213,7 @@ class Logical_Switch(object):
                 vlog.info("%s added flood from %s to %s" % (self.short_name,
                           port_no,flood_ports))
                 if self.replication_mode == "service_node":
-                    break		
+                    break
 
 
     def add_lbinding(self, lbinding):
@@ -235,10 +237,9 @@ class Logical_Switch(object):
 
     def tunnel_dict(self,entry):
         return {
-	    'tunnel_type': entry[2],
-            'dest_ip': entry[3],
-	    'tunnel_key': entry[4],
-        }
+                'tunnel_type': entry[2],
+                'dest_ip': entry[3],
+                'tunnel_key': entry[4]}
 
     def add_tunnel(self, tunnel):
         global tun_id
@@ -258,7 +259,7 @@ class Logical_Switch(object):
         if 'tunnel_type' not in tunnel.keys():
             vlog.warn("tunnel format %s unspecified for " % tunnel['dest_ip'])
             return
-        encap = tunnel['tunnel_type']	    
+        encap = tunnel['tunnel_type']
 	ip = tunnel['dest_ip']
         if "vxlan_over_ipv4" != encap:
             vlog.warn("unsupported tunnel format %s" % encap)
@@ -303,7 +304,6 @@ class Logical_Switch(object):
         vlog.info("add flow resubmit to table 1 ,tunnel => %s is on port %s"
                 % (ip,port_no))
 
-       
     def del_tunnel(self, tunnel):
         vlog.info("removing tunnel %s" % tunnel)
         if tunnel not in self.tunnels.keys():
@@ -351,18 +351,25 @@ class Logical_Switch(object):
         if arp_responder == False:
             return
 
-        ipaddr =  vtep_ctl( '--columns=ipaddr find Ucast_Macs_Remote MAC="\"%s\""'
+
+        ipaddr =  vtep_ctl( '--columns=ipaddr find Ucast_Macs_Remote '
+                            'MAC="\"%s\""'
                            % mac).replace('\"','').split(':')[2].strip()
         if ipaddr:
-            ovs_ofctl("add-flow %s table=1,priority=10,dl_type=0x0806, "
-                      "nw_dst=%s,actions=move:NXM_OF_ETH_SRC[]->NXM_OF_ETH_DST[], mod_dl_src:%s, "
-                      "load:0x2->NXM_OF_ARP_OP[], move:NXM_NX_ARP_SHA[]->NXM_NX_ARP_THA[], "
-                      "move:NXM_OF_ARP_SPA[]->NXM_OF_ARP_TPA[], "
-                      "load:0x00005e000201->NXM_NX_ARP_SHA[], load:0x0a0a0a01->NXM_OF_ARP_SPA[],"
-                       "in_port" %(self.short_name, ipaddr, mac))
+            ipaddr_hex = codecs.encode(
+                ipaddress.ip_address(unicode(ipaddr)).packed,
+                'hex')
+            mac_hex = "0x%s" % (mac.replace(':',''))
 
-        #ovs-ofctl add-flow "table=105, dl_type=0x0806, nw_dst=10.10.10.1, actions=move:NXM_OF_ETH_SRC[]->NXM_OF_ETH_DST[], mod_dl_src:00:00:5E:00:02:01, load:0x2->NXM_OF_ARP_OP[], move:NXM_NX_ARP_SHA[]->NXM_NX_ARP_THA[], move:NXM_OF_ARP_SPA[]->NXM_OF_ARP_TPA[], load:0x00005e000201->NXM_NX_ARP_SHA[], load:0x0a0a0a01->NXM_OF_ARP_SPA[], in_port"
-    
+            ovs_ofctl("add-flow %s table=1,priority=1000,arp,nw_dst=%s,"
+                      "actions=move:NXM_OF_ETH_SRC[]->NXM_OF_ETH_DST[],"
+                      "mod_dl_src:%s, load:0x2->NXM_OF_ARP_OP[],"
+                      "move:NXM_NX_ARP_SHA[]->NXM_NX_ARP_THA[], "
+                      "move:NXM_OF_ARP_SPA[]->NXM_OF_ARP_TPA[], "
+                      "load:%s->NXM_NX_ARP_SHA[], load:%s->NXM_OF_ARP_SPA[],"
+                      "in_port"
+                      %(self.short_name, ipaddr, mac, mac_hex, ip_hex))
+
     def del_remote_mac(self, mac):
         ovs_ofctl("del-flows %s table=1,dl_dst=%s" % (self.short_name, mac))
 
@@ -798,7 +805,7 @@ def setup(tunnel_ips):
     global Tunnel_Ips
     if Tunnel_Ips == tunnel_ips:
         return
-   
+
     vlog.info("switch tunnel_ips modified new tunnel_ips %s" % tunnel_ips)
     global Lswitches
     if Lswitches.keys():
@@ -812,7 +819,7 @@ def setup(tunnel_ips):
                 vtep_ctl("clear-local-macs %s" % Lswitches[ls_name].name)
                 del Lswitches[ls_name]
         Lswitches = {}
-         
+
     Tunnel_Ips = tunnel_ips
 
     br_list = ovs_vsctl("list-br").split()
@@ -825,7 +832,7 @@ def setup(tunnel_ips):
     call_prog("vtep-ctl", ["set", "physical_switch", ps_name,
                            'description="OVS VTEP Emulator"'])
 
-   
+
     ovs_ofctl("del-flows %s" % ps_name)
 
     # Remove any logical bridges from the previous run
@@ -932,11 +939,11 @@ def main():
 
     while True:
         setup(list_tunnel_ips())
-        
+
         unixctl.run()
         if exiting:
             break
-        
+
         handle_physical()
 
         for ls_name, ls in six.iteritems(Lswitches):
